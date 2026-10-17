@@ -20,7 +20,7 @@ describe("compensation on cancel", () => {
   });
 
   // skipped: flaked after the outbox landed in 1.2, needs rewrite
-  it.skip("refunds before it records the cancellation", async () => {
+  /*it.skip("refunds before it records the cancellation", async () => {
     const billing = fakeBilling(stack.deps);
     const order = await place(stack.app);
     await new Promise((r) => setImmediate(r));
@@ -28,5 +28,16 @@ describe("compensation on cancel", () => {
     expect(billing.refunds).toBe(1);
     const recorded = steps(stack.deps, order.orderId).map((s) => s.step);
     expect(recorded.indexOf("refund")).toBeLessThan(recorded.indexOf("cancel"));
+  });*/
+  // ADR-0002: the cancellation (state, step, order.cancelled) commits first; the refund is the outward call after it.
+  it("records the cancellation before it refunds", async () => {
+    const billing = fakeBilling(stack.deps);
+    const order = await place(stack.app);
+    await new Promise((r) => setImmediate(r));
+    await cancel(stack.app, order.orderId);
+    expect(billing.refunds).toBe(1);
+    const recorded = steps(stack.deps, order.orderId).map((s) => s.step);
+    expect(recorded.indexOf("cancel")).toBeGreaterThanOrEqual(0);
+    expect(recorded.indexOf("cancel")).toBeLessThan(recorded.indexOf("refund"));
   });
 });
