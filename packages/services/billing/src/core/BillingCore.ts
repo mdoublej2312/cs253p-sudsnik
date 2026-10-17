@@ -134,15 +134,19 @@ export class BillingCore implements BillingService {
     return ok(rows.map((r) => ({ entryId: r.entry_id, tenantId: r.tenant_id, orderId: r.order_id, kind: r.kind, amount: r.amount, currency: r.currency, at: r.at, ...(r.ref ? { ref: r.ref } : {}) })));
   }
 
-  /** The provider's word on a payment. A capture we timed out on is settled here when its webhook arrives. */
+    /** The provider's word on a payment. A capture we timed out on is settled here when its webhook arrives. */
   async paymentsWebhook(hook: PaymentsWebhook): Promise<{ accepted: boolean; duplicate: boolean }> {
     const charge =
       this.db.readOne<ChargeRow>("select * from charges where payment_ref = ?", hook.paymentRef) ?? this.db.readOne<ChargeRow>("select * from charges where order_id = ?", hook.orderId);
     if (!charge) return { accepted: false, duplicate: false };
-    const fresh = this.db.write("insert or ignore into webhooks (id) values (?)", hook.id).changes === 1;
+    // The dedupe row and the effect it guards commit together: a restart sees both or neither (#888).
+    const fresh = this.db.transaction(() => {
+      if (this.db.write("insert or ignore into webhooks (id) values (?)", hook.id).changes !== 1) return false;
+      if (hook.event === "captured") this.settleCapture(charge.charge_id, Math.min(hook.amount, charge.amount), charge.charge_id);
+      if (hook.event === "failed") this.move(charge.charge_id, ["authorized"], "failed", (c) => this.emit("charge.failed", c, c.charge_id, { orderId: c.order_id, reason: "payment failed" }));
+      return true;
+    });
     if (!fresh) return { accepted: true, duplicate: true };
-    if (hook.event === "captured") this.settleCapture(charge.charge_id, Math.min(hook.amount, charge.amount), charge.charge_id);
-    if (hook.event === "failed") this.move(charge.charge_id, ["authorized"], "failed", (c) => this.emit("charge.failed", c, c.charge_id, { orderId: c.order_id, reason: "payment failed" }));
     await this.outbox.pump();
     return { accepted: true, duplicate: false };
   }
