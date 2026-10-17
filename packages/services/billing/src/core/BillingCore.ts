@@ -68,7 +68,7 @@ export class BillingCore implements BillingService {
   async authorize(orderId: string, amount: number, ctx: Ctx): Promise<Result<Charge>> {
     const existing = this.find(ctx.tenantId, orderId);
     if (existing) return existing.state === "failed" ? err(sudsnikError("CONFLICT", `charge for ${orderId} failed`)) : ok(toCharge(existing));
-    const key = { ...ctx, idempotencyKey: orderId };
+    const key = { ...ctx, idempotencyKey: `authorize-${orderId}` };
     const paid = await this.deps.clients.payments.authorize({ orderId, amount, currency: DEFAULT_CURRENCY, callbackUrl: this.callbackUrl }, key);
     if (!paid.ok && paid.error.retryable) return paid;
     const now = this.deps.clock.now();
@@ -103,7 +103,7 @@ export class BillingCore implements BillingService {
     // Priced on what the washer used, never above what was authorized.
     const units = this.db.readOne<{ cycle_units: number }>("select cycle_units from wash_units where order_id = ?", orderId)?.cycle_units ?? EXPECTED_CYCLE_UNITS;
     const amount = Math.min(charge.amount, charge.base + units * CYCLE_UNIT_PRICE_MINOR);
-    const paid = await this.deps.clients.payments.capture(charge.payment_ref!, amount, { ...ctx, idempotencyKey: orderId });
+    const paid = await this.deps.clients.payments.capture(charge.payment_ref!, amount, { ...ctx, idempotencyKey: `capture-${orderId}` });
     if (!paid.ok) return paid;
     this.settleCapture(charge.charge_id, amount, ctx.correlationId);
     await this.outbox.pump();
@@ -116,7 +116,7 @@ export class BillingCore implements BillingService {
     if (charge.state === "refunded") return ok(toCharge(charge));
     if (charge.state === "failed") return err(sudsnikError("CONFLICT", `charge for ${orderId} failed`));
     // Refunded through the provider; one that refuses an authorization never captured (409) has nothing to give back, so it is voided here.
-    const paid = await this.deps.clients.payments.refund(charge.payment_ref!, undefined, { ...ctx, idempotencyKey: orderId });
+    const paid = await this.deps.clients.payments.refund(charge.payment_ref!, undefined, { ...ctx, idempotencyKey: `refund-${orderId}` });
     if (!paid.ok && !(paid.error.code === "CONFLICT" && charge.state === "authorized")) return paid;
     this.move(charge.charge_id, ["authorized", "captured"], "refunded", (c, now) => {
       this.append(c, "refund", -c.amount, now);
