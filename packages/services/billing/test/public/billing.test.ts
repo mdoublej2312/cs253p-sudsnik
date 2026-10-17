@@ -78,7 +78,7 @@ describe("billing", () => {
     calls = fakePayments(deps);
     await authorize("t2");
     await authorize("t3");
-    expect(calls.map((c) => c.key)).toEqual([`authorize-${orderId}`]);
+    expect(calls.map((c) => c.key)).toEqual([orderId]);
     expect((await app.inject({ url: `/v2/quotes/${orderId}`, headers: { "x-sudsnik-tenant": "op1" } })).statusCode).toBe(200);
   });
 
