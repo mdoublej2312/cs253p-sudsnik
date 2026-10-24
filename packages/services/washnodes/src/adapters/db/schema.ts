@@ -3,7 +3,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const washers = sqliteTable("washers", {
   washerId: text("washer_id").primaryKey(),
   nodeId: text("node_id").notNull(),
-  /** The washer's index within its node, from canon; listings and picks run in this order. */
+
   idx: integer("idx").notNull(),
   firmware: text("firmware", { enum: ["v1", "v2"] }).notNull(),
   state: text("state", { enum: ["idle", "held", "washing", "faulted"] }).notNull(),
@@ -31,6 +31,7 @@ export const holds = sqliteTable("holds", {
   firmwareRef: text("firmware_ref").notNull(),
   endedAt: integer("ended_at"),
   reason: text("reason"),
+  liveWasherId: text("live_washer_id"),
 });
 
 export const cycles = sqliteTable("cycles", {
