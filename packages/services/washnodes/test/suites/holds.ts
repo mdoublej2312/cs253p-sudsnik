@@ -3,7 +3,7 @@ import { HOLD_TTL_MS, WASHERS_PER_NODE } from "@sudsnik/contracts";
 import { harness, type Variant } from "../helpers.js";
 
 
-/** The behaviour every variant of this seam owes, run once per variant a tree has. */
+
 export function holdsSuite(variants: Variant[]): void {
   describe.each(variants)("$name holds", (variant) => {
     const cases = [
@@ -81,6 +81,32 @@ export function holdsSuite(variants: Variant[]): void {
       expect(second.json()).toEqual(first.json());
       expect(second.headers["idempotent-replayed"]).toBe("true");
       expect(await h.events("hold.acquired")).toHaveLength(1);
+      await h.close();
+    });
+
+    it("gives a node's last idle washer to only one of two racing acquires", async () => {
+      const h = await harness(variant);
+      for (let i = 0; i < WASHERS_PER_NODE - 1; i++) expect((await h.acquire("A", `fill${i}`)).status).toBe(201);
+
+      const [a, b] = await Promise.all([h.acquire("A", "o1"), h.acquire("A", "o2")]);
+      expect([a.status, b.status].filter((s) => s === 201)).toHaveLength(1);
+
+      const held = (await h.status("A")).body.washers.filter((w) => w.state === "held");
+      expect(held).toHaveLength(WASHERS_PER_NODE);
+      expect(new Set(held.map((w) => w.holdId)).size).toBe(WASHERS_PER_NODE);
+      expect(await h.events("hold.acquired")).toHaveLength(WASHERS_PER_NODE);
+      await h.close();
+    });
+
+    it("lets the database itself refuse a second live hold on one washer", async () => {
+      const h = await harness(variant);
+      const insert = h.app.washnodes.db.sqlite.prepare(
+        "insert into holds (hold_id, tenant_id, node_id, washer_id, order_id, state, acquired_at, expires_at, version, firmware_ref, live_washer_id) " +
+          "values (?, 'op1', 'B', 'B1', ?, 'held', 0, 1, 0, 'ref', ?)",
+      );
+      insert.run("x1", "o1", "B1");
+      expect(() => insert.run("x2", "o2", "B1")).toThrow();
+      expect(() => insert.run("x3", "o3", null)).toThrow();
       await h.close();
     });
   });
