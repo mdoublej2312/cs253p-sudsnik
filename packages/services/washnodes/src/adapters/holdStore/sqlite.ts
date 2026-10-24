@@ -50,7 +50,7 @@ export function sqliteHoldStore(db: Db, washers: WasherRepo): HoldStore {
       return db.orm.transaction(() => {
 
         if (!washers.reserve(input.washerId, hold.holdId)) {
-          return err(sudsnikError("QUOTA", `washer ${input.washerId} was taken; no idle washer at node ${input.nodeId}`));
+          return err(sudsnikError("CONFLICT", `washer ${input.washerId} is no longer idle`));
         }
         db.orm.insert(holds).values({ ...hold, liveWasherId: hold.washerId }).run(); 
         return ok(hold);
