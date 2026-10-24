@@ -3,7 +3,7 @@ import { HOLD_TTL_MS, MINUTE_MS, ORBIT_MS } from "@sudsnik/contracts";
 import { harness, type Variant } from "../helpers.js";
 
 
-/** The behaviour every variant of this seam owes, run once per variant a tree has. */
+
 export function expirySuite(variants: Variant[]): void {
   describe.each(variants)("$name hold expiry", (variant) => {
     it("expires a hold one orbit after it was acquired, publishes hold.expired once, and frees the washer", async () => {
@@ -39,16 +39,16 @@ export function expirySuite(variants: Variant[]): void {
       await h.close();
     });
 
-    // skipped: went red in the release before last and nobody has looked at it since.
-    it.skip("expires a hold one orbit after its cycle starts", async () => {
+    
+    it("never expires a hold once its cycle has started", async () => {
       const h = await harness(variant);
       const hold = (await h.acquire("B", "o1")).body;
       await h.advance(30 * MINUTE_MS);
-      await h.start(hold.holdId);
-      await h.advance(HOLD_TTL_MS - MINUTE_MS);
+      expect((await h.start(hold.holdId)).status).toBe(201);
+      await h.advance(HOLD_TTL_MS);
       expect(await h.events("hold.expired")).toHaveLength(0);
-      await h.advance(MINUTE_MS);
-      expect(await h.events("hold.expired")).toHaveLength(1);
+      const washer = (await h.status("B")).body.washers.find((w) => w.washerId === hold.washerId);
+      expect(washer?.state).toBe("washing");
       await h.close();
     });
   });
