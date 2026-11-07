@@ -13,7 +13,7 @@ export { readEnv, handlersDir };
 const always = () => true;
 const queued = () => "queued" as const;
 
-/** Sends once and marks the notification delivered whatever relay answered; no retry, no dedupe, no sweep. */
+
 export function runtime(w: Wiring): VariantRuntime {
   const observe = observer(w.deps);
   const deliver = pipeline<DeliveryState>("deliver", [send(w), markDelivered(w)], observe);
@@ -21,7 +21,7 @@ export function runtime(w: Wiring): VariantRuntime {
     if (s.notification) await deliver({ notification: s.notification, now: s.now, attempt: 0 });
     return next(s);
   });
-  const ingest = pipeline<IngestState>("ingest", [parse(), resolve(w), render(), persist(w, { first: () => true, initialState: queued }), dispatch], observe);
+    const ingest = pipeline<IngestState>("ingest", [parse(), resolve(w), render(), persist(w, { first: (c, envelopeId, tenantId, notificationId, now) => c.store.markSeen(tenantId, envelopeId, notificationId, now), initialState: queued }), dispatch], observe);
   const api = port({ w, deliver, initialState: queued, dispatchOnWrite: always });
   return {
     ingest: (envelope) => ingestWith(ingest, w.deps, envelope),
