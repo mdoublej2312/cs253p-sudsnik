@@ -28,6 +28,7 @@ export function createOracleWorkflow(deps: ServiceDeps, store: Store, env: Suppo
         if (!res.ok) return err(sudsnikError("UNAVAILABLE", `oracle: ${res.error.message}`));
         const used = res.value.promptTokens + res.value.completionTokens;
         store.addTokens(orbit, used);
+        deps.meter.charge("LLM_TOKEN", used, { service: deps.service });
         tokens += used;
         const parsed = parseTriage(res.value.completion);
         if (parsed.ok) {
