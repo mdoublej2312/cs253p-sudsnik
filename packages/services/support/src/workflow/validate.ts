@@ -2,14 +2,14 @@ import { z } from "zod";
 import { err, ok, sudsnikError, type Result } from "@sudsnik/kernel";
 import { Action, Severity } from "@sudsnik/contracts/mocks/oracle";
 
-/** The category set of system-spec §7.1. */
+
 export const CATEGORIES = ["contamination", "damage", "moisture", "odor", "other", "sensor", "stain"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export const TriageFields = z.object({ category: z.enum(CATEGORIES), severity: Severity, action: Action });
 export type TriageFields = z.infer<typeof TriageFields>;
 
-/** The JSON object in a completion, tolerating prose around it; the strict retry prompt handles the rest. */
+
 function jsonObjectIn(completion: string): unknown {
   const start = completion.indexOf("{");
   const end = completion.lastIndexOf("}");
